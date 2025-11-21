@@ -21,11 +21,13 @@ jobs:
         
     - name: Install dependencies
       run: |
+        cd n85ylvh9-auto
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         
     - name: Create config from secrets
       run: |
+        cd n85ylvh9-auto
         cat > config.json << EOF
         {
           "wordpress_url": "${{ secrets.WORDPRESS_URL }}",
@@ -43,12 +45,14 @@ jobs:
         
     - name: Run category crawler
       run: |
+        cd n85ylvh9-auto
         python crawl_category.py "${{ secrets.CATEGORY_URL }}"
         
     - name: Commit and push state
       run: |
+        cd n85ylvh9-auto
         git config --global user.name "GitHub Actions Bot"
         git config --global user.email "actions@github.com"
-        git add crawler_state.json
+        git add crawler_state.json 2>/dev/null || true
         git diff --quiet && git diff --staged --quiet || git commit -m "Update crawler state [skip ci]"
         git push
