@@ -1,4 +1,5 @@
 # WordPress & Plugin files to ignore
+*.php
 wp-config.php
 wp-content/uploads/
 wp-content/cache/
@@ -43,3 +44,7 @@ logs/*.log
 # Temporary files
 *.tmp
 *.temp
+
+# Other WordPress files
+includes/
+logs/
