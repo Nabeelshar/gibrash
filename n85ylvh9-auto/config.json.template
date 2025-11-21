@@ -1,0 +1,12 @@
+{
+  "wordpress_url": "https://blreads.tech",
+  "api_key": "PLACEHOLDER_USE_ENVIRONMENT_VARIABLE",
+  "google_project_id": "",
+  "google_credentials_file": "",
+  "gemini_api_key": "PLACEHOLDER_USE_ENVIRONMENT_VARIABLE",
+  "max_chapters_per_run": 999,
+  "delay_between_requests": 2,
+  "translate": true,
+  "target_language": "en",
+  "use_gemini_for_content": true
+}
