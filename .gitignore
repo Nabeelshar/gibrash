@@ -1,0 +1,45 @@
+# WordPress & Plugin files to ignore
+wp-config.php
+wp-content/uploads/
+wp-content/cache/
+*.log
+
+# Python environment
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Config files with sensitive data
+n85ylvh9-auto/config.json
+
+# Documentation files
+*.md
+*.MD
+README*
+CHANGELOG*
+CONTRIBUTING*
+LICENSE*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/*.log
+*.log
+
+# Temporary files
+*.tmp
+*.temp
