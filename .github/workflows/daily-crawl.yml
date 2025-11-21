@@ -49,12 +49,7 @@ jobs:
     - name: Run crawler
       run: |
         cd n85ylvh9-auto
-        # If CATEGORY_URL is set, use it. Otherwise skip (for manual single novel runs)
-        if [ -n "${{ secrets.CATEGORY_URL }}" ]; then
-          python crawl_category.py "${{ secrets.CATEGORY_URL }}"
-        else
-          echo "No CATEGORY_URL set - skipping automated crawl"
-        fi
+        python crawl_category.py https://www.xbanxia.cc/list/1_1.html
         
     - name: Commit and push state
       run: |

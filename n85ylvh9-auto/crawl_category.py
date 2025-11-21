@@ -31,14 +31,20 @@ def crawl_category(category_url, max_novels=1):
         print(f"Found {len(novels)} novels on page {pagination['current']}/{pagination['total']}")
         print(f"Category Page: {current_url}\n")
         
-        # Crawl each novel on this page
-        for idx, novel_url in enumerate(novels, 1):
+        # Always crawl 3rd novel from the list (skip first 2)
+        novels_to_crawl = novels[2:3] if len(novels) >= 3 else []
+        
+        if not novels_to_crawl:
+            print(f"Not enough novels on page (need at least 3, found {len(novels)})")
+            continue
+            
+        for idx, novel_url in enumerate(novels_to_crawl, 3):
             # Stop if we've reached max novels
             if total_novels_processed >= max_novels:
                 print(f"\n✓ Reached max novels limit ({max_novels}). Stopping.")
                 break
                 
-            print(f"\n[Novel {idx}/{len(novels)} on page {page_num}]")
+            print(f"\n[Novel {idx} (3rd on page {page_num})]")
             print(f"URL: {novel_url}")
             
             # Check if novel was already processed
