@@ -6,6 +6,9 @@ on:
     - cron: '0 */6 * * *'
   workflow_dispatch:  # Allow manual trigger
 
+permissions:
+  contents: write  # Allow pushing changes
+
 jobs:
   crawl:
     runs-on: ubuntu-latest
@@ -43,10 +46,15 @@ jobs:
         }
         EOF
         
-    - name: Run category crawler
+    - name: Run crawler
       run: |
         cd n85ylvh9-auto
-        python crawl_category.py "${{ secrets.CATEGORY_URL }}"
+        # If CATEGORY_URL is set, use it. Otherwise skip (for manual single novel runs)
+        if [ -n "${{ secrets.CATEGORY_URL }}" ]; then
+          python crawl_category.py "${{ secrets.CATEGORY_URL }}"
+        else
+          echo "No CATEGORY_URL set - skipping automated crawl"
+        fi
         
     - name: Commit and push state
       run: |
