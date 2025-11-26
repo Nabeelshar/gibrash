@@ -462,6 +462,7 @@ class NovelCrawler:
             self.log(f"  {'='*50}")
             
             # Try to load existing glossary or generate new one
+            # GLOSSARY IS MANDATORY - retry up to 3 times if generation fails
             glossary_loaded = False
             if self.use_gemini_for_content and self.gemini_translator:
                 glossary_loaded = self.gemini_translator.load_glossary(novel_id)
@@ -469,8 +470,26 @@ class NovelCrawler:
                 if not glossary_loaded:
                     # Generate glossary from all downloaded chapters
                     self.log(f"\n  Generating glossary from all {len(chapters_raw_data)} chapters...")
-                    self.gemini_translator.generate_glossary(chapters_raw_data)
-                    self.gemini_translator.save_glossary(novel_id, self.file_manager)
+                    
+                    # Retry glossary generation up to 3 times
+                    max_glossary_retries = 3
+                    for glossary_attempt in range(max_glossary_retries):
+                        glossary = self.gemini_translator.generate_glossary(chapters_raw_data)
+                        if glossary and len(glossary) > 0:
+                            self.gemini_translator.save_glossary(novel_id, self.file_manager)
+                            glossary_loaded = True
+                            break
+                        else:
+                            self.log(f"  ⚠ Glossary generation failed (attempt {glossary_attempt + 1}/{max_glossary_retries})")
+                            if glossary_attempt < max_glossary_retries - 1:
+                                self.log(f"    Retrying in 5 seconds...")
+                                time.sleep(5)
+                    
+                    if not glossary_loaded:
+                        self.log(f"\n  ✗ FATAL: Glossary generation failed after {max_glossary_retries} attempts")
+                        self.log(f"    Glossary is mandatory for consistent translation quality")
+                        self.log(f"    Please check Gemini API key and quota, then retry")
+                        raise Exception("Glossary generation failed - mandatory for translation")
             
             # Prepare list for bulk chapter upload
             chapters_to_upload = []
