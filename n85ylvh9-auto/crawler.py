@@ -154,6 +154,49 @@ class NovelCrawler:
         self.log(f"Total novels processed: {total_novels_processed}")
         self.log("")
     
+    def _create_story_in_wordpress(self, novel_id, novel_data, translated_title, translated_description, novel_url):
+        """
+        Helper method to create story in WordPress after downloading cover
+        
+        Returns:
+            tuple: (story_id, story_already_existed)
+        """
+        self.log(f"\n  {'='*50}")
+        self.log(f"  Creating story in WordPress")
+        self.log(f"  {'='*50}")
+        
+        # Download cover image if available
+        cover_path = None
+        if novel_data['cover_url']:
+            try:
+                cover_filename = self.file_manager.download_cover(novel_id, novel_data['cover_url'])
+                cover_path = os.path.join('novels', f'novel_{novel_id}', cover_filename)
+                self.log(f"  Cover downloaded: {cover_filename}")
+            except Exception as e:
+                self.log(f"  Failed to download cover: {e}")
+        
+        # Create story in WordPress
+        story_data = {
+            'title': translated_title,
+            'description': translated_description,
+            'title_zh': novel_data['title'],
+            'author': novel_data['author'],
+            'url': novel_url,
+            'cover_url': novel_data['cover_url'],
+            'cover_path': cover_path
+        }
+        
+        story_result = self.wordpress.create_story(story_data)
+        story_id = story_result['id']
+        
+        if story_result.get('existed'):
+            self.log(f"  Story already exists (ID: {story_id})")
+        else:
+            patreon_status = " [Patreon: Volare ALL Novels]" if story_result.get('patreon_gating') else ""
+            self.log(f"  Story created successfully (ID: {story_id}){patreon_status}")
+        
+        return story_id, story_result.get('existed', False)
+    
     def crawl_novel(self, novel_url):
         """Main crawling process"""
         self.log("\n" + "="*50)
@@ -288,29 +331,18 @@ class NovelCrawler:
             translated_description = novel_data['description']
             self.log("  Translation disabled")
         
-        # Step 5: Check if story exists in WordPress using translated title
+        # Step 5: Check if story already exists (for resuming novels)
+        # For new stories, we'll create AFTER glossary generation succeeds
         self.log("\n[5/6] Checking if story exists...")
-        story_data_check = {
-            'title': translated_title,  # Use translated title for lookup
-            'description': translated_description,  # Use translated description
-            'title_zh': novel_data['title'],
-            'author': novel_data['author'],
-            'url': novel_url,
-            'cover_url': novel_data['cover_url'],
-            'cover_path': None  # Don't download yet
-        }
+        story_id = novel_progress.get('story_id')  # Get story_id from progress if resuming
+        story_already_exists = False
         
-        story_result = self.wordpress.create_story(story_data_check)
-        story_id = story_result['id']
-        
-        if story_result.get('existed'):
-            self.log(f"  Story exists (ID: {story_id})")
-        else:
-            patreon_status = " [Patreon: Volare ALL Novels]" if story_result.get('patreon_gating') else ""
-            self.log(f"  Story created (ID: {story_id}){patreon_status}")
-        
-        if story_result.get('existed'):
-            # 🚀 OPTIMIZATION: Check if all chapters exist BEFORE downloading cover
+        if story_id:
+            # Story exists from previous run - verify it still exists in WordPress
+            self.log(f"  Resuming with existing story ID: {story_id}")
+            story_already_exists = True
+            
+            # Check if all chapters exist BEFORE downloading cover
             chapter_status = self.wordpress.get_story_chapter_status(story_id, len(novel_data['chapters']))
             
             if chapter_status['success'] and chapter_status['is_complete']:
@@ -323,18 +355,9 @@ class NovelCrawler:
                 return
             else:
                 self.log(f"  Novel incomplete ({chapter_status['chapters_count']}/{len(novel_data['chapters'])} chapters) - continuing...")
-        
-        # Only download cover if we're processing chapters
-        self.log("\n[5/6] Downloading cover...")
-        # Download cover image if available
-        cover_path = None
-        if novel_data['cover_url']:
-            try:
-                cover_filename = self.file_manager.download_cover(novel_id, novel_data['cover_url'])
-                cover_path = os.path.join('novels', f'novel_{novel_id}', cover_filename)
-                self.log(f"  Cover downloaded: {cover_filename}")
-            except Exception as e:
-                self.log(f"  Failed to download cover: {e}")
+        else:
+            # New story - will be created after glossary generation
+            self.log(f"  New story - will be created after glossary generation")
         
         # Save metadata
         metadata = {
@@ -350,19 +373,6 @@ class NovelCrawler:
             'total_chapters': len(novel_data['chapters'])
         }
         self.file_manager.save_metadata(novel_id, metadata)
-        
-        # Always update WordPress story with complete metadata after translation/download
-        # This ensures cover, description, and translated title are all up-to-date
-        story_data_final = {
-            'title': translated_title,
-            'description': translated_description,
-            'title_zh': novel_data['title'],
-            'author': novel_data['author'],
-            'url': novel_url,
-            'cover_url': novel_data['cover_url'],
-            'cover_path': cover_path
-        }
-        self.wordpress.create_story(story_data_final)
         
         # Step 6: Process chapters with TWO-PASS SYSTEM
         self.log(f"\n[6/6] Processing chapters (max {self.max_chapters})...")
@@ -385,25 +395,29 @@ class NovelCrawler:
         if resume_from_chapter > 0:
             self.log(f"  Resuming from chapter {start_chapter} to {end_chapter}")
         
-        # Get existing chapters (already checked in step 5, but get details for processing)
+        # Get existing chapters only if story already exists
         # CPU OPTIMIZATION: Cache this result to avoid repeated API calls
-        if not hasattr(self, '_cached_chapter_status') or self._cached_chapter_status.get('story_id') != story_id:
-            chapter_status = self.wordpress.get_story_chapter_status(story_id, len(novel_data['chapters']))
-            self._cached_chapter_status = {'story_id': story_id, 'status': chapter_status}
-        else:
-            chapter_status = self._cached_chapter_status['status']
-            self.log(f"  Using cached chapter status (CPU optimization)")
-        
-        if chapter_status['success']:
-            if chapter_status['chapters_count'] > 0:
-                self.log(f"  Found {chapter_status['chapters_count']} existing chapters - will skip those")
-                existing_chapter_set = set(chapter_status['existing_chapters'])
+        if story_already_exists:
+            if not hasattr(self, '_cached_chapter_status') or self._cached_chapter_status.get('story_id') != story_id:
+                chapter_status = self.wordpress.get_story_chapter_status(story_id, len(novel_data['chapters']))
+                self._cached_chapter_status = {'story_id': story_id, 'status': chapter_status}
             else:
-                existing_chapter_set = set()
+                chapter_status = self._cached_chapter_status['status']
+                self.log(f"  Using cached chapter status (CPU optimization)")
+            
+            if chapter_status['success']:
+                if chapter_status['chapters_count'] > 0:
+                    self.log(f"  Found {chapter_status['chapters_count']} existing chapters - will skip those")
+                    existing_chapter_set = set(chapter_status['existing_chapters'])
+                else:
+                    existing_chapter_set = set()
+            else:
+                # Fallback: will check individually
+                self.log("  Bulk check unavailable - checking chapters individually")
+                existing_chapter_set = None
         else:
-            # Fallback: will check individually
-            self.log("  Bulk check unavailable - checking chapters individually")
-            existing_chapter_set = None
+            # New story - no chapters exist yet
+            existing_chapter_set = set()
         
         # ========== PASS 1: Download all chapters ==========
         self.log(f"\n  {'='*50}")
@@ -412,19 +426,20 @@ class NovelCrawler:
         
         chapters_raw_data = []
         for idx, chapter in enumerate(chapters_to_process, start=start_chapter):
-            # Check if chapter exists (use bulk result if available)
-            if existing_chapter_set is not None:
-                if idx in existing_chapter_set:
-                    self.log(f"    Chapter {idx}: Already in WordPress - Skipped")
-                    chapters_existed += 1
-                    continue
-            else:
-                # Fallback to individual check
-                chapter_check = self.wordpress.check_chapter_exists(story_id, idx)
-                if chapter_check['exists']:
-                    self.log(f"    Chapter {idx}: Already in WordPress - Skipped")
-                    chapters_existed += 1
-                    continue
+            # Check if chapter exists only for existing stories
+            if story_already_exists:
+                if existing_chapter_set is not None:
+                    if idx in existing_chapter_set:
+                        self.log(f"    Chapter {idx}: Already in WordPress - Skipped")
+                        chapters_existed += 1
+                        continue
+                else:
+                    # Fallback to individual check
+                    chapter_check = self.wordpress.check_chapter_exists(story_id, idx)
+                    if chapter_check['exists']:
+                        self.log(f"    Chapter {idx}: Already in WordPress - Skipped")
+                        chapters_existed += 1
+                        continue
             
             self.log(f"    Chapter {idx}: Downloading...")
             
@@ -490,6 +505,14 @@ class NovelCrawler:
                         self.log(f"    Glossary is mandatory for consistent translation quality")
                         self.log(f"    Please check Gemini API key and quota, then retry")
                         raise Exception("Glossary generation failed - mandatory for translation")
+            
+            # ========== CREATE STORY AFTER GLOSSARY GENERATION SUCCEEDS ==========
+            if not story_already_exists:
+                self.log(f"\n  After successful glossary generation:")
+                story_id, _ = self._create_story_in_wordpress(
+                    novel_id, novel_data, translated_title, translated_description, novel_url
+                )
+                story_already_exists = True
             
             # Prepare list for bulk chapter upload
             chapters_to_upload = []
@@ -735,7 +758,15 @@ class NovelCrawler:
                         story_id=story_id
                     )
         else:
-            # No translation needed - just upload existing chapters
+            # No translation needed - create story if it doesn't exist, then upload chapters
+            if not story_already_exists and len(chapters_raw_data) > 0:
+                self.log(f"\n  Translation disabled, creating story:")
+                story_id, _ = self._create_story_in_wordpress(
+                    novel_id, novel_data, translated_title, translated_description, novel_url
+                )
+                story_already_exists = True
+            
+            # Upload chapters
             for ch_data in chapters_raw_data:
                 idx = ch_data['idx']
                 
