@@ -154,6 +154,49 @@ class NovelCrawler:
         self.log(f"Total novels processed: {total_novels_processed}")
         self.log("")
     
+    def _create_story_in_wordpress(self, novel_id, novel_data, translated_title, translated_description, novel_url):
+        """
+        Helper method to create story in WordPress after downloading cover
+        
+        Returns:
+            tuple: (story_id, story_already_existed)
+        """
+        self.log(f"\n  {'='*50}")
+        self.log(f"  Creating story in WordPress")
+        self.log(f"  {'='*50}")
+        
+        # Download cover image if available
+        cover_path = None
+        if novel_data['cover_url']:
+            try:
+                cover_filename = self.file_manager.download_cover(novel_id, novel_data['cover_url'])
+                cover_path = os.path.join('novels', f'novel_{novel_id}', cover_filename)
+                self.log(f"  Cover downloaded: {cover_filename}")
+            except Exception as e:
+                self.log(f"  Failed to download cover: {e}")
+        
+        # Create story in WordPress
+        story_data = {
+            'title': translated_title,
+            'description': translated_description,
+            'title_zh': novel_data['title'],
+            'author': novel_data['author'],
+            'url': novel_url,
+            'cover_url': novel_data['cover_url'],
+            'cover_path': cover_path
+        }
+        
+        story_result = self.wordpress.create_story(story_data)
+        story_id = story_result['id']
+        
+        if story_result.get('existed'):
+            self.log(f"  Story already exists (ID: {story_id})")
+        else:
+            patreon_status = " [Patreon: Volare ALL Novels]" if story_result.get('patreon_gating') else ""
+            self.log(f"  Story created successfully (ID: {story_id}){patreon_status}")
+        
+        return story_id, story_result.get('existed', False)
+    
     def crawl_novel(self, novel_url):
         """Main crawling process"""
         self.log("\n" + "="*50)
@@ -465,42 +508,14 @@ class NovelCrawler:
             
             # ========== CREATE STORY AFTER GLOSSARY GENERATION SUCCEEDS ==========
             if not story_already_exists:
-                self.log(f"\n  {'='*50}")
-                self.log(f"  Creating story after successful glossary generation")
-                self.log(f"  {'='*50}")
-                
-                # Download cover image if available
-                cover_path = None
-                if novel_data['cover_url']:
-                    try:
-                        cover_filename = self.file_manager.download_cover(novel_id, novel_data['cover_url'])
-                        cover_path = os.path.join('novels', f'novel_{novel_id}', cover_filename)
-                        self.log(f"  Cover downloaded: {cover_filename}")
-                    except Exception as e:
-                        self.log(f"  Failed to download cover: {e}")
-                
-                # Create story in WordPress
-                story_data = {
-                    'title': translated_title,
-                    'description': translated_description,
-                    'title_zh': novel_data['title'],
-                    'author': novel_data['author'],
-                    'url': novel_url,
-                    'cover_url': novel_data['cover_url'],
-                    'cover_path': cover_path
-                }
-                
-                story_result = self.wordpress.create_story(story_data)
-                story_id = story_result['id']
+                self.log(f"\n  After successful glossary generation:")
+                story_id, _ = self._create_story_in_wordpress(
+                    novel_id, novel_data, translated_title, translated_description, novel_url
+                )
                 story_already_exists = True
-                
-                if story_result.get('existed'):
-                    self.log(f"  Story already exists (ID: {story_id})")
-                else:
-                    patreon_status = " [Patreon: Volare ALL Novels]" if story_result.get('patreon_gating') else ""
-                    self.log(f"  Story created successfully (ID: {story_id}){patreon_status}")
             
             # Prepare list for bulk chapter upload
+            chapters_to_upload = []
             
             # Translate each chapter
             for ch_data in chapters_raw_data:
@@ -745,39 +760,11 @@ class NovelCrawler:
         else:
             # No translation needed - create story if it doesn't exist, then upload chapters
             if not story_already_exists and len(chapters_raw_data) > 0:
-                self.log(f"\n  {'='*50}")
-                self.log(f"  Creating story (translation disabled)")
-                self.log(f"  {'='*50}")
-                
-                # Download cover image if available
-                cover_path = None
-                if novel_data['cover_url']:
-                    try:
-                        cover_filename = self.file_manager.download_cover(novel_id, novel_data['cover_url'])
-                        cover_path = os.path.join('novels', f'novel_{novel_id}', cover_filename)
-                        self.log(f"  Cover downloaded: {cover_filename}")
-                    except Exception as e:
-                        self.log(f"  Failed to download cover: {e}")
-                
-                # Create story in WordPress
-                story_data = {
-                    'title': translated_title,
-                    'description': translated_description,
-                    'title_zh': novel_data['title'],
-                    'author': novel_data['author'],
-                    'url': novel_url,
-                    'cover_url': novel_data['cover_url'],
-                    'cover_path': cover_path
-                }
-                
-                story_result = self.wordpress.create_story(story_data)
-                story_id = story_result['id']
+                self.log(f"\n  Translation disabled, creating story:")
+                story_id, _ = self._create_story_in_wordpress(
+                    novel_id, novel_data, translated_title, translated_description, novel_url
+                )
                 story_already_exists = True
-                
-                if story_result.get('existed'):
-                    self.log(f"  Story already exists (ID: {story_id})")
-                else:
-                    self.log(f"  Story created successfully (ID: {story_id})")
             
             # Upload chapters
             for ch_data in chapters_raw_data:

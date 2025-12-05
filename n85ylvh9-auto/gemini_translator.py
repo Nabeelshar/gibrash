@@ -438,11 +438,15 @@ Polished version:"""
             if os.path.exists(filepath):
                 self.glossary = {}
                 with open(filepath, 'r', encoding='utf-8') as f:
-                    for line in f:
+                    for line_num, line in enumerate(f, 1):
                         line = line.strip()
                         if line and ' = ' in line:
-                            chinese, english = line.split(' = ', 1)
-                            self.glossary[chinese] = english
+                            parts = line.split(' = ', 1)
+                            if len(parts) == 2:
+                                chinese, english = parts
+                                self.glossary[chinese] = english
+                            else:
+                                self.logger(f"  ⚠ Skipping malformed line {line_num}: {line}")
                 self.logger(f"✓ Loaded existing glossary with {len(self.glossary)} entries")
                 return True
             return False
