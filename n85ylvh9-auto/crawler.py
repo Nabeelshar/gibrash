@@ -501,7 +501,6 @@ class NovelCrawler:
                     self.log(f"  Story created successfully (ID: {story_id}){patreon_status}")
             
             # Prepare list for bulk chapter upload
-            chapters_to_upload = []
             
             # Translate each chapter
             for ch_data in chapters_raw_data:
@@ -744,7 +743,43 @@ class NovelCrawler:
                         story_id=story_id
                     )
         else:
-            # No translation needed - just upload existing chapters
+            # No translation needed - create story if it doesn't exist, then upload chapters
+            if not story_already_exists and len(chapters_raw_data) > 0:
+                self.log(f"\n  {'='*50}")
+                self.log(f"  Creating story (translation disabled)")
+                self.log(f"  {'='*50}")
+                
+                # Download cover image if available
+                cover_path = None
+                if novel_data['cover_url']:
+                    try:
+                        cover_filename = self.file_manager.download_cover(novel_id, novel_data['cover_url'])
+                        cover_path = os.path.join('novels', f'novel_{novel_id}', cover_filename)
+                        self.log(f"  Cover downloaded: {cover_filename}")
+                    except Exception as e:
+                        self.log(f"  Failed to download cover: {e}")
+                
+                # Create story in WordPress
+                story_data = {
+                    'title': translated_title,
+                    'description': translated_description,
+                    'title_zh': novel_data['title'],
+                    'author': novel_data['author'],
+                    'url': novel_url,
+                    'cover_url': novel_data['cover_url'],
+                    'cover_path': cover_path
+                }
+                
+                story_result = self.wordpress.create_story(story_data)
+                story_id = story_result['id']
+                story_already_exists = True
+                
+                if story_result.get('existed'):
+                    self.log(f"  Story already exists (ID: {story_id})")
+                else:
+                    self.log(f"  Story created successfully (ID: {story_id})")
+            
+            # Upload chapters
             for ch_data in chapters_raw_data:
                 idx = ch_data['idx']
                 
