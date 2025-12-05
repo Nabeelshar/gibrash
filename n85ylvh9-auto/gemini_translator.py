@@ -420,9 +420,10 @@ Polished version:"""
             novel_dir = os.path.join('novels', f'novel_{novel_id}')
             os.makedirs(novel_dir, exist_ok=True)
             
-            filepath = os.path.join(novel_dir, 'glossary.json')
+            filepath = os.path.join(novel_dir, 'glossary.txt')
             with open(filepath, 'w', encoding='utf-8') as f:
-                json.dump(self.glossary, f, ensure_ascii=False, indent=2)
+                for chinese, english in self.glossary.items():
+                    f.write(f"{chinese} = {english}\n")
             
             self.logger(f"✓ Glossary saved to {filepath}")
         except Exception as e:
@@ -432,11 +433,16 @@ Polished version:"""
         """Load existing glossary from file"""
         try:
             import os
-            filepath = os.path.join('novels', f'novel_{novel_id}', 'glossary.json')
+            filepath = os.path.join('novels', f'novel_{novel_id}', 'glossary.txt')
             
             if os.path.exists(filepath):
+                self.glossary = {}
                 with open(filepath, 'r', encoding='utf-8') as f:
-                    self.glossary = json.load(f)
+                    for line in f:
+                        line = line.strip()
+                        if line and ' = ' in line:
+                            chinese, english = line.split(' = ', 1)
+                            self.glossary[chinese] = english
                 self.logger(f"✓ Loaded existing glossary with {len(self.glossary)} entries")
                 return True
             return False
