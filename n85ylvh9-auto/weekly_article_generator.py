@@ -84,27 +84,22 @@ class WeeklyArticleGenerator:
     def get_recent_novels(self, days=7):
         """Fetch novels added in the last N days from WordPress"""
         try:
-            # Calculate date range
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=days)
-            
-            # Fetch recent stories from WordPress
-            url = f"{self.wordpress_url}/wp-json/wp/v2/fcn_story"
+            # Use custom crawler API endpoint
+            url = f"{self.wordpress_url}/wp-json/crawler/v1/stories/recent"
             params = {
+                'days': days,
                 'per_page': 20,
-                'orderby': 'date',
-                'order': 'desc',
-                'after': start_date.isoformat(),
             }
             headers = {'X-API-Key': self.api_key}
             
             response = requests.get(url, params=params, headers=headers, timeout=30)
             
             if response.status_code == 200:
-                novels = response.json()
-                return novels
+                data = response.json()
+                return data.get('stories', [])
             else:
                 print(f"Failed to fetch novels: {response.status_code}")
+                print(response.text)
                 return []
                 
         except Exception as e:
@@ -211,7 +206,7 @@ Write the article now:"""
 
         try:
             # Call Gemini API
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={self.gemini_api_key}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.gemini_api_key}"
             
             payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
@@ -289,7 +284,8 @@ Write the article now:"""
 <p><em>Looking for more recommendations? Check out our <a href="https://volarereads.com/stories/">full novel library</a> or join our <a href="#">Discord community</a> to chat with fellow readers!</em></p>
 """
             
-            url = f"{self.wordpress_url}/wp-json/wp/v2/posts"
+            # Use custom crawler API endpoint
+            url = f"{self.wordpress_url}/wp-json/crawler/v1/article"
             headers = {
                 'X-API-Key': self.api_key,
                 'Content-Type': 'application/json'
@@ -299,11 +295,7 @@ Write the article now:"""
                 'title': article_data['title'],
                 'content': content_with_schema,
                 'status': 'publish',
-                'categories': [],  # Add your blog category ID
-                'tags': [],  # Add relevant tag IDs
-                'meta': {
-                    '_yoast_wpseo_metadesc': f"Discover this week's best BL novel recommendations on Volarereads. {article_data['title']}"
-                }
+                'meta_description': f"Discover this week's best BL novel recommendations on Volarereads. {article_data['title']}"
             }
             
             response = requests.post(url, json=post_data, headers=headers, timeout=30)
